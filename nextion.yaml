@@ -1,0 +1,698 @@
+wifi:
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+  ap:
+    ssid: ${devicename}
+    password: !secret ap_password
+
+
+#ethernet:
+#  type: LAN8720
+#  mdc_pin: GPIO33
+#  mdio_pin: GPIO04
+#  clk_mode: GPIO0_OUT
+#  phy_addr: 1
+#  power_pin: GPIO05
+
+
+captive_portal:
+
+
+logger:
+
+
+api:
+
+
+ota:
+
+
+substitutions:
+  devicename: nextion
+  friendly_name: NEXTION
+
+
+esphome:
+  name: $devicename
+  platform: ESP32
+  board: esp-wrover-kit
+  on_boot:
+    priority: -100
+    then:
+      - script.execute: startup
+
+
+uart:
+  id: nextion_uart
+  rx_pin: GPIO16
+  tx_pin: GPIO17
+  baud_rate: 115200
+
+
+display:
+  - platform: nextion
+    id: nextiondisplay
+    update_interval: 1s
+    uart_id: nextion_uart
+
+
+globals:
+  - id: light_friendly_names
+    type: std::vector<std::string>
+    restore_value: no
+    initial_value: '{"Lepu Light", "Dvolador", "Shineway", "Meloof", "Go Ocean", "Light 6"}'
+
+  - id: light_entity_ids
+    type: std::vector<std::string>
+    restore_value: no
+    initial_value: '{"light.16_pwm_lepu_12w_ww_40", "light.16_pwm_dvolador_factory_12w_nw_45_60", "light.16_pwm_shineway_1_15w_ww_xx", "light.16_pwm_meloof_1_15w_ww_38", "light.16_pwm_go_ocean_1_12w_ww_45", "light.light_6"}'
+
+  - id: light_brightness
+    type: std::vector<int>
+    restore_value: no
+    initial_value: '{-1, -1, -1, -1, -1, -1}'
+
+  - id: new_light_focus
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: old_light_focus
+    type: int
+    restore_value: no
+    initial_value: '-1'
+
+  - id: new_light_focus_picture_brightness
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  - id: old_light_focus_picture_brightness
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  - id: display_action
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  - id: get_picture_brightness_focused
+    type: bool
+    restore_value: no
+    initial_value: '0'
+
+  - id: get_picture_brightness_not_focused
+    type: bool
+    restore_value: no
+    initial_value: '0'
+
+script:
+  - id: startup
+    then:
+      # set text messages on the display
+      - lambda: |-
+          // prevent ack erros showing in the logs
+          //id(nextiondisplay).set_wait_for_ack(false);
+
+          // set display's text values
+          id(nextiondisplay).send_command_printf("text_light_0.txt=\"%s\"", id(light_friendly_names)[0].c_str());
+          id(nextiondisplay).send_command_printf("vis text_light_0,1");
+          id(nextiondisplay).send_command_printf("text_light_1.txt=\"%s\"", id(light_friendly_names)[1].c_str());
+          id(nextiondisplay).send_command_printf("vis text_light_1,1");
+          id(nextiondisplay).send_command_printf("text_light_2.txt=\"%s\"", id(light_friendly_names)[2].c_str());
+          id(nextiondisplay).send_command_printf("vis text_light_2,1");
+          id(nextiondisplay).send_command_printf("text_light_3.txt=\"%s\"", id(light_friendly_names)[3].c_str());
+          id(nextiondisplay).send_command_printf("vis text_light_3,1");
+          id(nextiondisplay).send_command_printf("text_light_4.txt=\"%s\"", id(light_friendly_names)[4].c_str());
+          id(nextiondisplay).send_command_printf("vis text_light_4,1");
+          id(nextiondisplay).send_command_printf("text_light_5.txt=\"%s\"", id(light_friendly_names)[5].c_str());
+          id(nextiondisplay).send_command_printf("vis text_light_5,1");
+
+          //id(nextiondisplay).set_component_text("text_light_0", "Lepu Light");
+          // this command didn't work in the on_boot section, changed to send_command_printf
+          //id(nextiondisplay).set_component_text_printf("text_light_0", "%s", id(light_friendly_names)[0].c_str());
+
+  - id: update_display
+    then:
+      - if:
+          condition:
+            # update the display when changing the light focus
+            lambda: 'return (id(display_action) == "light_focus");'
+          then:
+            - lambda: |-
+                id(get_picture_brightness_focused) = 1;
+                id(get_picture_brightness_not_focused) = 1;
+            - script.execute: get_picture_brightness_picture_ID
+            - lambda: |-
+                // set focus on the new focus light
+                id(nextiondisplay).send_command_printf("pic_light_%d.pic=%s", id(new_light_focus), id(new_light_focus_picture_brightness).c_str());
+                id(nextiondisplay).send_command_printf("text_light_%d.bco=6502", id(new_light_focus));
+                id(nextiondisplay).send_command_printf("vis text_light_%d,1", id(new_light_focus));
+
+                // remove focus on the old focused light
+                id(nextiondisplay).send_command_printf("pic_light_%d.pic=%s", id(old_light_focus), id(old_light_focus_picture_brightness).c_str());
+                id(nextiondisplay).send_command_printf("text_light_%d.bco=6371", id(old_light_focus));
+                id(nextiondisplay).send_command_printf("vis text_light_%d,1", id(old_light_focus));
+
+                // update slider value with the new focus light brightness
+                if (id(light_brightness)[id(new_light_focus)] == -1) {
+                  id(nextiondisplay).set_component_value("slider", 0);
+                } else {
+                  id(nextiondisplay).set_component_value("slider", id(light_brightness)[id(new_light_focus)]);
+                }
+
+      - if:
+          condition:
+            # update the display when a focused light change states or brightness
+            lambda: 'return (id(display_action) == "change_focused_light");'
+          then:
+            - lambda: |-
+                id(get_picture_brightness_focused) = 1;
+            - script.execute: get_picture_brightness_picture_ID
+            - lambda: |-
+                // update picture and slider on the focused light
+                id(nextiondisplay).send_command_printf("pic_light_%d.pic=%s", id(new_light_focus), id(new_light_focus_picture_brightness).c_str());
+                id(nextiondisplay).send_command_printf("text_light_%d.bco=6502", id(new_light_focus));
+                id(nextiondisplay).send_command_printf("vis text_light_%d,1", id(new_light_focus));
+
+                // update slider value on the focused light
+                if (id(light_brightness)[id(new_light_focus)] == -1) {
+                  id(nextiondisplay).set_component_value("slider", 0);
+                } else {
+                  id(nextiondisplay).set_component_value("slider", id(light_brightness)[id(new_light_focus)]);
+                }
+
+      - if:
+          condition:
+          # update the display when a not focused light change states or brightness
+            lambda: 'return (id(display_action) == "change_not_focused_light");'
+          then:
+            - lambda: |-
+                id(get_picture_brightness_not_focused) = 1;
+            - script.execute: get_picture_brightness_picture_ID
+            - lambda: |-
+                // update picture on the not focused light
+                id(nextiondisplay).send_command_printf("pic_light_%d.pic=%s", id(old_light_focus), id(old_light_focus_picture_brightness).c_str());
+                id(nextiondisplay).send_command_printf("text_light_%d.bco=6371", id(old_light_focus));
+                id(nextiondisplay).send_command_printf("vis text_light_%d,1", id(old_light_focus));
+
+      - if:
+          condition:
+          # update the display brightness
+            lambda: 'return (id(display_action) == "change_display_brightness");'
+          then:
+            - lambda: |-
+                // update the display brightness backlight
+                id(nextiondisplay).set_backlight_brightness(id(nextion_display_brightness).state);
+
+  - id: get_picture_brightness_picture_ID
+    then:
+      # gets the picture ID of the corresponding light brightness
+      - lambda: |-
+          if (id(get_picture_brightness_focused)) {
+            // Get the picture brightness number of the new focused light
+            if ((id(light_brightness)[id(new_light_focus)] == 0) || (id(light_brightness)[id(new_light_focus)] == -1)) {
+              id(new_light_focus_picture_brightness) = "27";
+            } else if ((id(light_brightness)[id(new_light_focus)] > 0) && (id(light_brightness)[id(new_light_focus)] <= 10)) {
+              id(new_light_focus_picture_brightness) = "17";
+            } else if ((id(light_brightness)[id(new_light_focus)] > 10) && (id(light_brightness)[id(new_light_focus)] <= 20)) {
+              id(new_light_focus_picture_brightness) = "18";
+            } else if ((id(light_brightness)[id(new_light_focus)] >20) && (id(light_brightness)[id(new_light_focus)] <= 30)) {
+              id(new_light_focus_picture_brightness) = "19";
+            } else if ((id(light_brightness)[id(new_light_focus)] > 30) && (id(light_brightness)[id(new_light_focus)] <= 40)) {
+              id(new_light_focus_picture_brightness) = "20";
+            } else if ((id(light_brightness)[id(new_light_focus)] > 40) && (id(light_brightness)[id(new_light_focus)] <= 50)) {
+              id(new_light_focus_picture_brightness) = "21";
+            } else if ((id(light_brightness)[id(new_light_focus)] > 50) && (id(light_brightness)[id(new_light_focus)] <= 60)) {
+              id(new_light_focus_picture_brightness) = "22";
+            } else if ((id(light_brightness)[id(new_light_focus)] > 60) && (id(light_brightness)[id(new_light_focus)] <= 70)) {
+              id(new_light_focus_picture_brightness) = "23";
+            } else if ((id(light_brightness)[id(new_light_focus)] > 70) && (id(light_brightness)[id(new_light_focus)] <= 80)) {
+              id(new_light_focus_picture_brightness) = "24";
+            } else if ((id(light_brightness)[id(new_light_focus)] > 80) && (id(light_brightness)[id(new_light_focus)] <= 90)) {
+              id(new_light_focus_picture_brightness) = "25";
+            } else if ((id(light_brightness)[id(new_light_focus)] > 90) && (id(light_brightness)[id(new_light_focus)] <= 100)) {
+              id(new_light_focus_picture_brightness) = "26";
+            }
+
+            id(get_picture_brightness_focused) = 0;
+          }
+          if (id(get_picture_brightness_not_focused)) {
+            // Get the picture brightness number of the old focused light
+            if ((id(light_brightness)[id(old_light_focus)] == 0) || (id(light_brightness)[id(old_light_focus)] == -1)) {
+              id(old_light_focus_picture_brightness) = "16";
+            } else if ((id(light_brightness)[id(old_light_focus)] > 0) && (id(light_brightness)[id(old_light_focus)] <= 10)) {
+              id(old_light_focus_picture_brightness) = "6";
+            } else if ((id(light_brightness)[id(old_light_focus)] > 10) && (id(light_brightness)[id(old_light_focus)] <= 20)) {
+              id(old_light_focus_picture_brightness) = "7";
+            } else if ((id(light_brightness)[id(old_light_focus)] >20) && (id(light_brightness)[id(old_light_focus)] <= 30)) {
+              id(old_light_focus_picture_brightness) = "8";
+            } else if ((id(light_brightness)[id(old_light_focus)] > 30) && (id(light_brightness)[id(old_light_focus)] <= 40)) {
+              id(old_light_focus_picture_brightness) = "9";
+            } else if ((id(light_brightness)[id(old_light_focus)] > 40) && (id(light_brightness)[id(old_light_focus)] <= 50)) {
+              id(old_light_focus_picture_brightness) = "10";
+            } else if ((id(light_brightness)[id(old_light_focus)] > 50) && (id(light_brightness)[id(old_light_focus)] <= 60)) {
+              id(old_light_focus_picture_brightness) = "11";
+            } else if ((id(light_brightness)[id(old_light_focus)] > 60) && (id(light_brightness)[id(old_light_focus)] <= 70)) {
+              id(old_light_focus_picture_brightness) = "12";
+            } else if ((id(light_brightness)[id(old_light_focus)] > 70) && (id(light_brightness)[id(old_light_focus)] <= 80)) {
+              id(old_light_focus_picture_brightness) = "13";
+            } else if ((id(light_brightness)[id(old_light_focus)] > 80) && (id(light_brightness)[id(old_light_focus)] <= 90)) {
+              id(old_light_focus_picture_brightness) = "14";
+            } else if ((id(light_brightness)[id(old_light_focus)] > 90) && (id(light_brightness)[id(old_light_focus)] <= 100)) {
+              id(old_light_focus_picture_brightness) = "15";
+            }
+
+            id(get_picture_brightness_not_focused) = 0;
+          }
+
+binary_sensor:
+  - platform: nextion
+    page_id: 0
+    component_id: 5
+    name: "${friendly_name} - Light(0) - Touch"
+    on_release:
+      then:
+        - if:
+            # check if the touched light(0) is focused
+            condition:
+              lambda: 'return (id(new_light_focus) == 0);'
+            then:
+              # light(0) is focused so toggle it
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: light.16_pwm_lepu_12w_ww_40
+            else:
+              # light(0) is not focused so set focus
+              - lambda: |-
+                  (id(display_action) = "light_focus");
+                  id(old_light_focus) = id(new_light_focus);
+                  id(new_light_focus) = 0;
+              - script.execute: update_display
+
+  - platform: nextion
+    page_id: 0
+    component_id: 6
+    name: "${friendly_name} - Light(1) - Touch"
+    on_release:
+      then:
+        - if:
+            # check if the touched light(1) is focused
+            condition:
+              lambda: 'return (id(new_light_focus) == 1);'
+            then:
+              # light(1) is focused so toggle it
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: light.16_pwm_dvolador_factory_12w_nw_45_60
+            else:
+              # light(1) is not focused so set focus
+              - lambda: |-
+                  (id(display_action) = "light_focus");
+                  id(old_light_focus) = id(new_light_focus);
+                  id(new_light_focus) = 1;
+              - script.execute: update_display
+
+  - platform: nextion
+    page_id: 0
+    component_id: 7
+    name: "${friendly_name} - Light(2) - Touch"
+    on_release:
+      then:
+        - if:
+            # check if the touched light(2) is focused
+            condition:
+              lambda: 'return (id(new_light_focus) == 2);'
+            then:
+              # light(2) is focused so toggle it
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: light.16_pwm_shineway_1_15w_ww_xx
+            else:
+              # light(2) is not focused so set focus
+              - lambda: |-
+                  (id(display_action) = "light_focus");
+                  id(old_light_focus) = id(new_light_focus);
+                  id(new_light_focus) = 2;
+              - script.execute: update_display
+
+  - platform: nextion
+    page_id: 0
+    component_id: 8
+    name: "${friendly_name} - Light(3) - Touch"
+    on_release:
+      then:
+        - if:
+            # check if the touched light(3) is focused
+            condition:
+              lambda: 'return (id(new_light_focus) == 3);'
+            then:
+              # light(3) is focused so toggle it
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: light.16_pwm_meloof_1_15w_ww_38
+            else:
+              # light(03) is not focused so set focus
+              - lambda: |-
+                  (id(display_action) = "light_focus");
+                  id(old_light_focus) = id(new_light_focus);
+                  id(new_light_focus) = 3;
+              - script.execute: update_display
+
+  - platform: nextion
+    page_id: 0
+    component_id: 9
+    name: "${friendly_name} - Light(4) - Touch"
+    on_release:
+      then:
+        - if:
+            # check if the touched light(04) is focused
+            condition:
+              lambda: 'return (id(new_light_focus) == 4);'
+            then:
+              # light(4) is focused so toggle it
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: light.16_pwm_go_ocean_1_12w_ww_45
+            else:
+              # light(4) is not focused so set focus
+              - lambda: |-
+                  (id(display_action) = "light_focus");
+                  id(old_light_focus) = id(new_light_focus);
+                  id(new_light_focus) = 4;
+              - script.execute: update_display
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 0%"
+    component_id: 32
+    on_release:
+      then:
+        # slider sending 0% brightness, turn off light
+        - homeassistant.service:
+            service: light.turn_off
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 10%"
+    component_id: 33
+    on_release:
+      then:
+        # slider sending 10% brightness, turn on light with 10% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "10"
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 20%"
+    component_id: 34
+    on_release:
+      then:
+        # slider sending 20% brightness, turn on light with 20% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "20"
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 30%"
+    component_id: 35
+    on_release:
+      then:
+        # slider sending 30% brightness, turn on light with 30% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "30"
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 40%"
+    component_id: 36
+    on_release:
+      then:
+        # slider sending 40% brightness, turn on light with 40% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "40"
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 50%"
+    component_id: 37
+    on_release:
+      then:
+        # slider sending 50% brightness, turn on light with 50% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "50"
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 60%"
+    component_id: 38
+    on_release:
+      then:
+        # slider sending 60% brightness, turn on light with 60% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "60"
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 70%"
+    component_id: 39
+    on_release:
+      then:
+        # slider sending 70% brightness, turn on light with 70% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "70"
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 80%"
+    component_id: 40
+    on_release:
+      then:
+        # slider sending 80% brightness, turn on light with 80% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "80"
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 90%"
+    component_id: 41
+    on_release:
+      then:
+        # slider sending 90% brightness, turn on light with 90% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "90"
+
+  - platform: nextion
+    page_id: 0
+    name: "${friendly_name} - Slider - 100%"
+    component_id: 42
+    on_release:
+      then:
+        # slider sending 100% brightness, turn on light with 100% brightness
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: !lambda 'return (id(light_entity_ids)[id(new_light_focus)]);'
+              brightness_pct: "100"
+
+  - platform: status
+    name: "${friendly_name} - Status"
+
+
+sensor:
+  - platform: homeassistant
+    name: "${friendly_name} - Lepu Light - Brightness"
+    entity_id: sensor.lepu_light_brightness
+    id: sensor_lepu_light_brightness
+    on_value:
+      then:
+        - if:
+            condition:
+              # check if light(0) brightness is unavailable and update brightness value
+              lambda: 'return (isnan(id(sensor_lepu_light_brightness).state));'
+            then:
+              - lambda: (id(light_brightness) [0] = -1);
+            else:
+              - lambda: (id(light_brightness) [0] = id(sensor_lepu_light_brightness).state);
+
+        - if:
+            condition:
+              # check if light(0) is focused
+              lambda: 'return (id(new_light_focus) == 0);'
+            then:
+              - lambda: (id(display_action) = "change_focused_light");
+            else:
+              - lambda: |-
+                  (id(old_light_focus) = 0);
+                  (id(display_action) = "change_not_focused_light");
+        - script.execute: update_display
+
+  - platform: homeassistant
+    name: "${friendly_name} - Dvolador Factory - Brightness"
+    entity_id: sensor.dvolador_factory_brightness
+    id: sensor_dvolador_factory_brightness
+    on_value:
+      then:
+        - if:
+            condition:
+              # check if light(1) brightness is unavailable and update brightness value
+              lambda: 'return (isnan(id(sensor_dvolador_factory_brightness).state));'
+            then:
+              - lambda: (id(light_brightness) [1] = -1);
+            else:
+              - lambda: (id(light_brightness) [1] = id(sensor_dvolador_factory_brightness).state);
+
+        - if:
+            condition:
+              # check if light(1) is focused
+              lambda: 'return (id(new_light_focus) == 1);'
+            then:
+              - lambda: (id(display_action) = "change_focused_light");
+            else:
+              - lambda: |-
+                  (id(old_light_focus) = 1);
+                  (id(display_action) = "change_not_focused_light");
+        - script.execute: update_display
+
+  - platform: homeassistant
+    name: "${friendly_name} - Shineway - Brightness"
+    entity_id: sensor.shineway_brightness
+    id: sensor_shineway_brightness
+    on_value:
+      then:
+        - if:
+            condition:
+              # check if light(2) brightness is unavailable and update brightness value
+              lambda: 'return (isnan(id(sensor_shineway_brightness).state));'
+            then:
+              - lambda: (id(light_brightness) [2] = -1);
+            else:
+              - lambda: (id(light_brightness) [2] = id(sensor_shineway_brightness).state);
+
+        - if:
+            condition:
+              # check if light(2) is focused
+              lambda: 'return (id(new_light_focus) == 2);'
+            then:
+              - lambda: (id(display_action) = "change_focused_light");
+            else:
+              - lambda: |-
+                  (id(old_light_focus) = 2);
+                  (id(display_action) = "change_not_focused_light");
+        - script.execute: update_display
+
+  - platform: homeassistant
+    name: "${friendly_name} - Meloof - Brightness"
+    entity_id: sensor.meloof_brightness
+    id: sensor_meloof_brightness
+    on_value:
+      then:
+        - if:
+            condition:
+              # check if light(3) brightness is unavailable and update brightness value
+              lambda: 'return (isnan(id(sensor_meloof_brightness).state));'
+            then:
+              - lambda: (id(light_brightness) [3] = -1);
+            else:
+              - lambda: (id(light_brightness) [3] = id(sensor_meloof_brightness).state);
+
+        - if:
+            condition:
+              # check if light(3) is focused
+              lambda: 'return (id(new_light_focus) == 3);'
+            then:
+              - lambda: (id(display_action) = "change_focused_light");
+            else:
+              - lambda: |-
+                  (id(old_light_focus) = 3);
+                  (id(display_action) = "change_not_focused_light");
+        - script.execute: update_display
+
+  - platform: homeassistant
+    name: "${friendly_name} - Go Ocean - Brightness"
+    entity_id: sensor.go_ocean_brightness
+    id: sensor_go_ocean_brightness
+    on_value:
+      then:
+        - if:
+            condition:
+              # check if light(4) brightness is unavailable and update brightness value
+              lambda: 'return (isnan(id(sensor_go_ocean_brightness).state));'
+            then:
+              - lambda: (id(light_brightness) [4] = -1);
+            else:
+              - lambda: (id(light_brightness) [4] = id(sensor_go_ocean_brightness).state);
+
+        - if:
+            condition:
+              # check if light(4) is focused
+              lambda: 'return (id(new_light_focus) == 4);'
+            then:
+              - lambda: (id(display_action) = "change_focused_light");
+            else:
+              - lambda: |-
+                  (id(old_light_focus) = 4);
+                  (id(display_action) = "change_not_focused_light");
+        - script.execute: update_display
+
+  - platform: homeassistant
+    name: "${friendly_name} - Display Brightness"
+    entity_id: input_number.nextion_display_brightness
+    id: nextion_display_brightness
+    on_value:
+      then:
+        # sets the display backlight brightness
+        - lambda: (id(display_action) = "change_display_brightness");
+        - script.execute: update_display
+
+  - platform: uptime
+    name: "${friendly_name} - Uptime"
+    update_interval: 60s
+    force_update: true
+
+  - platform: wifi_signal
+    name: "${friendly_name} - WiFi Signal"
+    update_interval: 60s
+    force_update: true
+
+
+switch:
+  - platform: restart
+    name: '${friendly_name} - Restart'
+    icon: mdi:restart
