@@ -10,9 +10,9 @@ The 4 light design has 3 tabs:
 
 Below are some pictures of the 4 light design:
 
-![Picture 1](https://raw.githubusercontent.com/WCampagner/lightswitch/main/4light_switch_1.jpg)
-![Picture 2](https://raw.githubusercontent.com/WCampagner/lightswitch/main/4light_switch_1.jpg)
-![Picture 3](https://raw.githubusercontent.com/WCampagner/lightswitch/main/4light_switch_1.jpg)
+![Picture 1](https://raw.githubusercontent.com/WCampagner/lightswitch/main/4light_switch_1.jpeg)
+![Picture 2](https://raw.githubusercontent.com/WCampagner/lightswitch/main/4light_switch_1.jpeg)
+![Picture 3](https://raw.githubusercontent.com/WCampagner/lightswitch/main/4light_switch_1.jpeg)
 
 Below are some pictures of the 6 light design:
 
